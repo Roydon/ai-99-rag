@@ -61,7 +61,7 @@ def get_conversational_chain():
 
         model = ChatGroq(
             temperature=0.3,
-            model_name="llama2-70b-4096",  # You can also use "mixtral-8x7b-32768"
+            model_name="llama-3.3-70b-versatile",  # You can also use "mixtral-8x7b-32768"
             groq_api_key=groq_api_key
         )
         prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
