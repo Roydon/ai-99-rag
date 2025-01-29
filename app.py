@@ -201,9 +201,9 @@ def compare_models(question, docs):
                         )
                     )
 
-                    response = chain(
+                    response = chain.invoke(
                         {"input_documents": docs, "question": question},
-                        return_only_outputs=True
+                        config={"return_only_outputs": True}
                     )
 
                     end_time = time.time()
@@ -261,9 +261,9 @@ def user_input(user_question):
             if chain is None:
                 return
 
-            response = chain(
+            response = chain.invoke(
                 {"input_documents": docs, "question": user_question},
-                return_only_outputs=True
+                config={"return_only_outputs": True}
             )
 
             end_time = time.time()
@@ -282,7 +282,6 @@ def user_input(user_question):
 
     except Exception as e:
         st.error(f"Error processing question: {str(e)}")
-
 def reset_app():
     """Resets the application state."""
     if os.path.exists("faiss_index"):
