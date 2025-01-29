@@ -11,6 +11,9 @@ import re
 import time
 from datetime import datetime
 
+# Disable file watcher to prevent inotify issues
+os.environ['STREAMLIT_SERVER_FILE_WATCHER_TYPE'] = 'none'
+
 # Model Configurations
 AVAILABLE_MODELS = {
     "Mixtral-8x7b": {
@@ -20,14 +23,14 @@ AVAILABLE_MODELS = {
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.1
     },
-    "Llama-3.3-70b": {
-        "name": "llama-3.3-70b-versatile",
+    "Llama-70b": {
+        "name": "llama2-70b-4096",
         "context_length": 4096,
         "description": "Llama 2 70B model",
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.1
     },
-    "DeepSeek-R1-70b": {
+    "DeepSeek-70b": {
         "name": "deepseek-r1-distill-llama-70b",
         "context_length": 4096,
         "description": "DeepSeek 70B distilled model",
@@ -46,7 +49,7 @@ if 'config' not in st.session_state:
         'chunk_size': 1000,
         'temperature': 0.1,
         'chunk_overlap': 200,
-        'selected_model': "DeepSeek-R1-70b"
+        'selected_model': "DeepSeek-70b"
     }
 
 if 'model_metrics' not in st.session_state:
@@ -60,6 +63,12 @@ if 'model_metrics' not in st.session_state:
 
 # Get API key from Streamlit secrets
 groq_api_key = st.secrets["GROQ_API_KEY"]
+
+def process_model_response(model_name, response_text):
+    """Process model response based on model name."""
+    if model_name.lower().startswith('deepseek'):
+        return re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL).strip()
+    return response_text
 
 def update_model_metrics(model_name, response_time):
     """Update usage metrics for the selected model."""
@@ -198,8 +207,11 @@ def compare_models(question, docs):
                     end_time = time.time()
                     response_time = end_time - start_time
 
+                    # Process response text based on model name
+                    response_text = process_model_response(model_name, response['output_text'])
+
                     results[model_name] = {
-                        'response': response['output_text'],
+                        'response': response_text,
                         'time': response_time
                     }
 
@@ -207,7 +219,7 @@ def compare_models(question, docs):
 
                     st.markdown(f"**{model_name}**")
                     st.markdown(f"Response time: {response_time:.2f}s")
-                    st.markdown(response['output_text'])
+                    st.markdown(response_text)
                     st.markdown("---")
             except Exception as e:
                 st.error(f"Error with {model_name}: {str(e)}")
@@ -255,9 +267,14 @@ def user_input(user_question):
             end_time = time.time()
             response_time = end_time - start_time
 
+            # Process response text based on model name
+            response_text = process_model_response(
+                st.session_state.config['selected_model'],
+                response['output_text']
+            )
+
             update_model_metrics(st.session_state.config['selected_model'], response_time)
 
-            response_text = re.sub(r'<think>.*?</think>', '', response['output_text'], flags=re.DOTALL).strip()
             st.markdown(f"### Reply:\n{response_text}")
             st.markdown(f"*Response time: {response_time:.2f}s*")
 
@@ -278,7 +295,7 @@ def reset_app():
         'chunk_size': 1000,
         'temperature': 0.1,
         'chunk_overlap': 200,
-        'selected_model': "DeepSeek-R1-70b"
+        'selected_model': "DeepSeek-70b"
     }
     st.rerun()
 
