@@ -1,5 +1,4 @@
 import streamlit as st
-import torch
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -7,7 +6,6 @@ from langchain_groq import ChatGroq
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
-from langchain_community.embeddings import SentenceTransformerEmbeddings
 import os
 import re
 import time
@@ -26,7 +24,7 @@ AVAILABLE_MODELS = {
         "default_temperature": 0.3
     },
     "Llama-3.3-70b": {
-        "name": "llama-3.3-70b-specdec",
+        "name": "llama-3.3-70b-versatile",
         "context_length": 4096,
         "description": "Llama 3.3 70B model",
         "temperature_range": (0.0, 1.0),
@@ -114,10 +112,10 @@ def get_text_chunks(text):
 def get_vector_store(text_chunks):
     """Creates and saves a FAISS vector store from text chunks."""
     try:
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        embeddings = SentenceTransformerEmbeddings(
-            model_name="all-MiniLM-L6-v2",
-            model_kwargs={'device': device}
+        embeddings = HuggingFaceBgeEmbeddings(
+            model_name="BAAI/bge-small-en-v1.5",
+            model_kwargs={'device': 'cpu'},
+            encode_kwargs={'normalize_embeddings': True}
         )
         vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
         vector_store.save_local("faiss_index")
@@ -233,12 +231,13 @@ def compare_models(question, docs):
 def user_input(user_question):
     """Handles user queries by retrieving answers from the vector store."""
     try:
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        embeddings = SentenceTransformerEmbeddings(
-            model_name="all-MiniLM-L6-v2",
-            model_kwargs={'device': device}
+        embeddings = HuggingFaceBgeEmbeddings(
+            model_name="BAAI/bge-small-en-v1.5",
+            model_kwargs={'device': 'cpu'},
+            encode_kwargs={'normalize_embeddings': True}
         )
         new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+
         docs = new_db.similarity_search(user_question, k=st.session_state.config['k_value'])
 
         if not docs:
