@@ -43,13 +43,13 @@ AVAILABLE_MODELS = {
 
 # Embeddings Configurations
 AVAILABLE_EMBEDDINGS = {
-    "BAAI/bge-small-en-v1.5": {
+    "BGE-small-en-v1.5": {
         "name": "BAAI/bge-small-en-v1.5",
         "description": "Lightweight, efficient embeddings model",
         "provider": "HuggingFace"
     },
-    "OpenAI Ada V2": {
-        "name": "text-embedding-ada-002",
+    "OpenAI-text-embedding": {
+        "name": "text-embedding-3-small",
         "description": "OpenAI's text embedding model",
         "provider": "OpenAI"
     }
@@ -69,7 +69,7 @@ if 'config' not in st.session_state:
     }
 
 if 'selected_embeddings' not in st.session_state:
-    st.session_state.selected_embeddings = "BAAI/bge-small-en-v1.5"
+    st.session_state.selected_embeddings = AVAILABLE_EMBEDDINGS["BGE-small-en-v1.5"]
 
 if 'model_metrics' not in st.session_state:
     st.session_state.model_metrics = {
@@ -344,7 +344,7 @@ def reset_app():
         except Exception as e:
             st.error(f"Error clearing index: {str(e)}")
     st.session_state.processing_complete = False
-    st.session_state.selected_embeddings = "BAAI/bge-small-en-v1.5"
+    st.session_state.selected_embeddings = AVAILABLE_EMBEDDINGS["BGE-small-en-v1.5"]
     st.session_state.config = {
         'k_value': 4,
         'chunk_size': 1000,
