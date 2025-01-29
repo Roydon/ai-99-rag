@@ -144,7 +144,7 @@ def get_vector_store(text_chunks):
     """Creates and saves a FAISS vector store from text chunks."""
     try:
         embeddings = HuggingFaceEmbeddings(
-            model_name="BAAI/bge-small-en-v1.5",
+            model_name="BAAI/bge-large-en-v1.5",
             model_kwargs={'device': 'cpu'},
             encode_kwargs={'normalize_embeddings': True}
         )
