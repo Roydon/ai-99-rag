@@ -65,9 +65,9 @@ if 'config' not in st.session_state:
         'chunk_size': 1000,
         'temperature': AVAILABLE_MODELS["DeepSeek-R1-70b"]["default_temperature"],
         'chunk_overlap': 200,
-        'selected_model': "DeepSeek-R1-70b"
+        'selected_model': "DeepSeek-R1-70b",
         'selected_embeddings': "BGE-small-en-v1.5"
-    }
+    }  # Added missing closing brace
 
 if 'model_metrics' not in st.session_state:
     st.session_state.model_metrics = {
