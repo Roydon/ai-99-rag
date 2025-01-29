@@ -24,7 +24,7 @@ AVAILABLE_MODELS = {
         "default_temperature": 0.1
     },
     "Llama-70b": {
-        "name": "llama2-70b-4096",
+        "name": "llama-3.3-70b-versatile",
         "context_length": 4096,
         "description": "Llama 2 70B model",
         "temperature_range": (0.0, 1.0),
