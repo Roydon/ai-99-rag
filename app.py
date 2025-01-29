@@ -61,7 +61,7 @@ def get_conversational_chain():
 
         model = ChatGroq(
             temperature=0.3,
-            model_name="llama-3.3-70b-versatile",  # You can also use "mixtral-8x7b-32768"
+            model_name="deepseek-r1-distill-llama-70b",
             groq_api_key=groq_api_key
         )
         prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
@@ -94,11 +94,11 @@ def user_input(user_question):
 def main():
     """Main function to run the Streamlit app."""
     st.set_page_config(page_title="Chat PDF", page_icon=":books:", layout="wide")
-    st.title("Chat with PDF using Groq (LLaMA 2) :smile:")
+    st.title("Chat with PDF using Groq (Deepseek R1)")
 
     st.sidebar.header("Upload & Process PDF Files")
     st.sidebar.markdown(
-        "Using Groq's LLaMA 2 70B model for advanced conversational capabilities.")
+        "Using Groq's Deepseek R1 Distill 70B model for advanced conversational capabilities.")
 
     with st.sidebar:
         pdf_docs = st.file_uploader(
@@ -130,7 +130,7 @@ def main():
 
     st.sidebar.info(
         """
-        **Note:** This app uses Groq's LLaMA 2 70B model for processing questions and generating answers.
+        **Note:** This app uses Groq's Deepseek R1 Distill 70B model for processing questions and generating answers.
         Make sure your PDFs are processed before asking questions.
         """
     )
