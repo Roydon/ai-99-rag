@@ -24,8 +24,13 @@ AVAILABLE_MODELS = {
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.3
     },
+<<<<<<< HEAD
     "Llama-70b": {
         "name": "llama-3.3-70b-specdec",
+=======
+    "Llama-3.3-70b": {
+        "name": "llama-3.3-70b-versatile",
+>>>>>>> parent of f69e17d (switching to llama-3.3-70b-specdec)
         "context_length": 4096,
         "description": "Llama 3.3 70B model",
         "temperature_range": (0.0, 1.0),
