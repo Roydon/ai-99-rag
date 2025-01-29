@@ -198,8 +198,10 @@ def compare_models(question, docs):
                     end_time = time.time()
                     response_time = end_time - start_time
 
+                    response_text = re.sub(r'<think>.*?</think>', '', response['output_text'], flags=re.DOTALL).strip()
+
                     results[model_name] = {
-                        'response': response['output_text'],
+                        'response': response_text['output_text'],
                         'time': response_time
                     }
 
@@ -207,7 +209,7 @@ def compare_models(question, docs):
 
                     st.markdown(f"**{model_name}**")
                     st.markdown(f"Response time: {response_time:.2f}s")
-                    st.markdown(response['output_text'])
+                    st.markdown(response_text['output_text'])
                     st.markdown("---")
             except Exception as e:
                 st.error(f"Error with {model_name}: {str(e)}")
