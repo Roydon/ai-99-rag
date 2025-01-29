@@ -54,7 +54,7 @@ def get_conversational_chain():
         You are a specialized assistant that ONLY answers questions based on the provided context.
         If the question cannot be answered using the information in the context, respond with:
         "I cannot answer this question as it's not covered in the provided documents."
-        
+
         DO NOT use any external knowledge or make assumptions beyond what's in the context.
         If you're unsure about any part of the answer, err on the side of saying the information is not available.
 
@@ -88,10 +88,10 @@ def user_input(user_question):
             encode_kwargs={'normalize_embeddings': True}
         )
         new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-        
+
         # Increase k for better context matching
         docs = new_db.similarity_search(user_question, k=4)
-        
+
         # Check if the similarity score is too low
         if not docs:
             st.markdown("### Reply:\nI cannot answer this question as it's not covered in the provided documents.")
@@ -147,3 +147,18 @@ def main():
 
     if user_question:
         if not os.path.exists("faiss_index"):
+            st.error("Please upload and process documents first.")
+            return
+
+        with st.spinner("Finding answer..."):
+            user_input(user_question)
+
+    st.sidebar.info(
+        """
+        **Note:** This assistant is strictly grounded to the uploaded documents.
+        It will not provide information from outside sources.
+        """
+    )
+
+if __name__ == "__main__":
+    main()
