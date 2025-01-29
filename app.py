@@ -6,7 +6,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 import os
 import re
 import time
@@ -143,7 +143,7 @@ def get_text_chunks(text):
 def get_vector_store(text_chunks):
     """Creates and saves a FAISS vector store from text chunks."""
     try:
-        embeddings = HuggingFaceBgeEmbeddings(
+        embeddings = HuggingFaceEmbeddings(
             model_name="BAAI/bge-small-en-v1.5",
             model_kwargs={'device': 'cpu'},
             encode_kwargs={'normalize_embeddings': True}
@@ -262,7 +262,7 @@ def compare_models(question, docs):
 def user_input(user_question):
     """Handles user queries by retrieving answers from the vector store."""
     try:
-        embeddings = HuggingFaceBgeEmbeddings(
+        embeddings = HuggingFaceEmbeddings(
             model_name="BAAI/bge-small-en-v1.5",
             model_kwargs={'device': 'cpu'},
             encode_kwargs={'normalize_embeddings': True}
