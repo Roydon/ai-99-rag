@@ -8,22 +8,67 @@ from langchain.prompts import PromptTemplate
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 import os
 import re
+import time
+from datetime import datetime
 
-# Initialize session state
+# Model Configurations
+AVAILABLE_MODELS = {
+    "Mixtral-8x7b": {
+        "name": "mixtral-8x7b-32768",
+        "context_length": 32768,
+        "description": "Mixtral 8x7B model with extended context",
+        "temperature_range": (0.0, 1.0),
+        "default_temperature": 0.1
+    },
+    "Llama-3.3-70b": {
+        "name": "llama-3.3-70b-versatile",
+        "context_length": 4096,
+        "description": "Llama 2 70B model",
+        "temperature_range": (0.0, 1.0),
+        "default_temperature": 0.1
+    },
+    "DeepSeek-R1-70b": {
+        "name": "deepseek-r1-distill-llama-70b",
+        "context_length": 4096,
+        "description": "DeepSeek 70B distilled model",
+        "temperature_range": (0.0, 1.0),
+        "default_temperature": 0.1
+    }
+}
+
+# Initialize session states
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
 
-# Initialize configuration defaults
 if 'config' not in st.session_state:
     st.session_state.config = {
         'k_value': 4,
         'chunk_size': 1000,
         'temperature': 0.1,
-        'chunk_overlap': 200
+        'chunk_overlap': 200,
+        'selected_model': "DeepSeek-R1-70b"
     }
 
-# Get API keys from Streamlit secrets
+if 'model_metrics' not in st.session_state:
+    st.session_state.model_metrics = {
+        model: {
+            'uses': 0,
+            'avg_response_time': 0,
+            'last_used': None
+        } for model in AVAILABLE_MODELS
+    }
+
+# Get API key from Streamlit secrets
 groq_api_key = st.secrets["GROQ_API_KEY"]
+
+def update_model_metrics(model_name, response_time):
+    """Update usage metrics for the selected model."""
+    metrics = st.session_state.model_metrics[model_name]
+    metrics['uses'] += 1
+    metrics['avg_response_time'] = (
+        (metrics['avg_response_time'] * (metrics['uses'] - 1) + response_time) / metrics['uses']
+    )
+    metrics['last_used'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def get_pdf_text(pdf_docs):
     """Extracts text from uploaded PDF files."""
@@ -69,13 +114,13 @@ def get_vector_store(text_chunks):
         return False
 
 def get_conversational_chain():
-    """Sets up a conversational chain using Groq LLM."""
+    """Sets up a conversational chain using selected Groq model."""
     try:
         prompt_template = """
         You are a specialized assistant that ONLY answers questions based on the provided context.
         If the question cannot be answered using the information in the context, respond with:
         "I cannot answer this question as it's not covered in the provided documents."
-        
+
         DO NOT use any external knowledge or make assumptions beyond what's in the context.
         If you're unsure about any part of the answer, err on the side of saying the information is not available.
 
@@ -88,9 +133,12 @@ def get_conversational_chain():
         Answer (based STRICTLY on the above context):
         """
 
+        selected_model = st.session_state.config['selected_model']
+        model_config = AVAILABLE_MODELS[selected_model]
+
         model = ChatGroq(
             temperature=st.session_state.config['temperature'],
-            model_name="deepseek-r1-distill-llama-70b",
+            model_name=model_config['name'],
             groq_api_key=groq_api_key
         )
         prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
@@ -99,6 +147,72 @@ def get_conversational_chain():
     except Exception as e:
         st.error(f"Error initializing Groq model: {str(e)}")
         return None
+
+def compare_models(question, docs):
+    """Compare responses from different models."""
+    results = {}
+
+    with st.expander("Model Comparison Results", expanded=True):
+        st.markdown("### Model Comparison")
+        st.markdown("Comparing responses from different models...")
+
+        for model_name, model_config in AVAILABLE_MODELS.items():
+            try:
+                with st.spinner(f"Getting response from {model_name}..."):
+                    start_time = time.time()
+
+                    model = ChatGroq(
+                        temperature=st.session_state.config['temperature'],
+                        model_name=model_config['name'],
+                        groq_api_key=groq_api_key
+                    )
+
+                    prompt_template = """
+                    You are a specialized assistant that ONLY answers questions based on the provided context.
+                    If the question cannot be answered using the information in the context, respond with:
+                    "I cannot answer this question as it's not covered in the provided documents."
+
+                    Context:
+                    {context}
+
+                    Question:
+                    {question}
+
+                    Answer (based STRICTLY on the above context):
+                    """
+
+                    chain = load_qa_chain(
+                        model,
+                        chain_type="stuff",
+                        prompt=PromptTemplate(
+                            template=prompt_template,
+                            input_variables=["context", "question"]
+                        )
+                    )
+
+                    response = chain(
+                        {"input_documents": docs, "question": question},
+                        return_only_outputs=True
+                    )
+
+                    end_time = time.time()
+                    response_time = end_time - start_time
+
+                    results[model_name] = {
+                        'response': response['output_text'],
+                        'time': response_time
+                    }
+
+                    update_model_metrics(model_name, response_time)
+
+                    st.markdown(f"**{model_name}**")
+                    st.markdown(f"Response time: {response_time:.2f}s")
+                    st.markdown(response['output_text'])
+                    st.markdown("---")
+            except Exception as e:
+                st.error(f"Error with {model_name}: {str(e)}")
+
+    return results
 
 def user_input(user_question):
     """Handles user queries by retrieving answers from the vector store."""
@@ -109,9 +223,9 @@ def user_input(user_question):
             encode_kwargs={'normalize_embeddings': True}
         )
         new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-        
+
         docs = new_db.similarity_search(user_question, k=st.session_state.config['k_value'])
-        
+
         if not docs:
             st.markdown("### Reply:\nI cannot answer this question as it's not covered in the provided documents.")
             return
@@ -122,17 +236,31 @@ def user_input(user_question):
             for i, doc in enumerate(docs, 1):
                 st.markdown(f"**Chunk {i}:**\n{doc.page_content}\n---")
 
-        chain = get_conversational_chain()
-        if chain is None:
-            return
+        # Check if comparison is requested
+        if getattr(st.session_state, 'show_comparison', False):
+            compare_models(user_question, docs)
+            st.session_state.show_comparison = False
+        else:
+            # Regular single model response
+            start_time = time.time()
+            chain = get_conversational_chain()
+            if chain is None:
+                return
 
-        response = chain(
-            {"input_documents": docs, "question": user_question},
-            return_only_outputs=True
-        )
+            response = chain(
+                {"input_documents": docs, "question": user_question},
+                return_only_outputs=True
+            )
 
-        response_text = re.sub(r'<think>.*?</think>', '', response['output_text'], flags=re.DOTALL).strip()
-        st.markdown(f"### Reply:\n{response_text}")
+            end_time = time.time()
+            response_time = end_time - start_time
+
+            update_model_metrics(st.session_state.config['selected_model'], response_time)
+
+            response_text = re.sub(r'<think>.*?</think>', '', response['output_text'], flags=re.DOTALL).strip()
+            st.markdown(f"### Reply:\n{response_text}")
+            st.markdown(f"*Response time: {response_time:.2f}s*")
+
     except Exception as e:
         st.error(f"Error processing question: {str(e)}")
 
@@ -149,32 +277,49 @@ def reset_app():
         'k_value': 4,
         'chunk_size': 1000,
         'temperature': 0.1,
-        'chunk_overlap': 200
+        'chunk_overlap': 200,
+        'selected_model': "DeepSeek-R1-70b"
     }
     st.rerun()
 
 def main():
     """Main function to run the Streamlit app."""
     st.set_page_config(
-        page_title="Document-Grounded Chat",
-        page_icon=":books:",
+        page_title="Multi-Model Document Chat",
+        page_icon="🤖",
         layout="wide",
         initial_sidebar_state="expanded"
     )
 
-    st.title("Document-Grounded Chat Assistant")
+    st.title("Multi-Model Document-Grounded Chat Assistant")
 
     # Sidebar
     with st.sidebar:
-        # Configuration Section
-        st.header("Configuration")
-        
+        # Model Selection
+        st.header("Model Selection")
+        selected_model = st.selectbox(
+            "Choose Model",
+            options=list(AVAILABLE_MODELS.keys()),
+            index=list(AVAILABLE_MODELS.keys()).index(st.session_state.config['selected_model']),
+            help="Select the Groq model to use for responses"
+        )
+
+        # Model Information
+        with st.expander("Model Information", expanded=False):
+            model_info = AVAILABLE_MODELS[selected_model]
+            st.markdown(f"""
+            **Model:** {selected_model}
+            - **Description:** {model_info['description']}
+            - **Context Length:** {model_info['context_length']} tokens
+            - **Temperature Range:** {model_info['temperature_range'][0]} to {model_info['temperature_range'][1]}
+            """)
+
         # Model Parameters
         st.subheader("Model Parameters")
         temperature = st.slider(
             "Temperature",
-            min_value=0.0,
-            max_value=1.0,
+            min_value=AVAILABLE_MODELS[selected_model]['temperature_range'][0],
+            max_value=AVAILABLE_MODELS[selected_model]['temperature_range'][1],
             value=st.session_state.config['temperature'],
             step=0.1,
             help="Controls randomness in the response. Lower values make responses more focused."
@@ -192,7 +337,7 @@ def main():
                 step=100,
                 help="Size of text chunks during processing"
             )
-        
+
         with col2:
             chunk_overlap = st.number_input(
                 "Chunk Overlap",
@@ -213,17 +358,30 @@ def main():
             help="Number of relevant chunks to use for answering"
         )
 
+        # Model Comparison
+        st.subheader("Model Comparison")
+        if st.button("Compare Models"):
+            st.session_state.show_comparison = True
+
         # Update configuration
         st.session_state.config.update({
             'temperature': temperature,
             'chunk_size': chunk_size,
             'chunk_overlap': chunk_overlap,
-            'k_value': k_value
+            'k_value': k_value,
+            'selected_model': selected_model
         })
 
-        # Reset configuration button
-        if st.button("Reset Configuration"):
-            reset_app()
+        # Model Metrics
+        if st.checkbox("Show Model Metrics"):
+            st.markdown("### Model Usage Metrics")
+            for model, metrics in st.session_state.model_metrics.items():
+                st.markdown(f"""
+                **{model}**
+                - Uses: {metrics['uses']}
+                - Avg Response Time: {metrics['avg_response_time']:.2f}s
+                - Last Used: {metrics['last_used'] or 'Never'}
+                """)
 
         st.markdown("---")
 
@@ -234,18 +392,18 @@ def main():
             accept_multiple_files=True,
             type=["pdf"]
         )
-        
+
         if not pdf_docs:
             st.info("Please upload PDF documents to begin.")
             st.button("Process Documents", disabled=True)
         else:
             st.success(f"{len(pdf_docs)} document(s) uploaded!")
-            
+
             # Show document names
             st.markdown("### Uploaded Documents:")
             for doc in pdf_docs:
                 st.markdown(f"- {doc.name}")
-            
+
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Process Documents", type="primary", key="process"):
@@ -257,28 +415,10 @@ def main():
                                 st.session_state.processing_complete = True
                                 st.success("Documents processed successfully!")
                                 st.rerun()
-            
+
             with col2:
                 if st.button("Clear All", type="secondary", key="clear"):
                     reset_app()
-
-        # System Status
-        st.markdown("---")
-        st.markdown("### System Status")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("Documents:")
-            if pdf_docs:
-                st.success("Uploaded")
-            else:
-                st.error("Not uploaded")
-        
-        with col2:
-            st.markdown("Processing:")
-            if st.session_state.processing_complete:
-                st.success("Complete")
-            else:
-                st.warning("Pending")
 
     # Main chat interface
     st.markdown("### Ask Questions")
@@ -301,29 +441,13 @@ def main():
             with st.spinner("Finding answer..."):
                 user_input(user_question)
 
-    # Information and guidelines
-    with st.sidebar:
-        st.markdown("---")
-        st.info(
-            """
-            **Guidelines:**
-            1. Upload PDF documents
-            2. Adjust configuration if needed
-            3. Click 'Process Documents'
-            4. Ask questions about the documents
-            5. Use 'Clear All' to reset
-            
-            **Note:** This assistant only answers questions based on the uploaded documents.
-            """
-        )
-
     # Footer
     st.markdown("---")
     st.markdown(
         """
         <div style='text-align: center'>
             <p style='color: #666; font-size: 0.8em;'>
-                Document-Grounded Chat Assistant | Powered by Groq & BGE Embeddings
+                Multi-Model Document-Grounded Chat Assistant | Powered by Groq
             </p>
         </div>
         """,
