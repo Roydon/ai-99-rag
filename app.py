@@ -7,6 +7,7 @@ from langchain_groq import ChatGroq
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings
 import os
 import re
 import time
@@ -40,6 +41,20 @@ AVAILABLE_MODELS = {
     }
 }
 
+# Embeddings Configurations
+AVAILABLE_EMBEDDINGS = {
+    "BAAI/bge-small-en-v1.5": {
+        "name": "BAAI/bge-small-en-v1.5",
+        "description": "Lightweight, efficient embeddings model",
+        "provider": "HuggingFace"
+    },
+    "OpenAI Ada V2": {
+        "name": "text-embedding-ada-002",
+        "description": "OpenAI's text embedding model",
+        "provider": "OpenAI"
+    }
+}
+
 # Initialize session states
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
@@ -53,6 +68,9 @@ if 'config' not in st.session_state:
         'selected_model': "DeepSeek-R1-70b"
     }
 
+if 'selected_embeddings' not in st.session_state:
+    st.session_state.selected_embeddings = "BAAI/bge-small-en-v1.5"
+
 if 'model_metrics' not in st.session_state:
     st.session_state.model_metrics = {
         model: {
@@ -64,6 +82,22 @@ if 'model_metrics' not in st.session_state:
 
 if 'prev_model' not in st.session_state:
     st.session_state.prev_model = "DeepSeek-R1-70b"
+
+def get_embeddings_model(embedding_choice):
+    """Returns the appropriate embeddings model based on selection."""
+    if AVAILABLE_EMBEDDINGS[embedding_choice]["provider"] == "HuggingFace":
+        return HuggingFaceEmbeddings(
+            model_name=AVAILABLE_EMBEDDINGS[embedding_choice]["name"],
+            model_kwargs={'device': 'cpu'},
+            encode_kwargs={'normalize_embeddings': True}
+        )
+    elif AVAILABLE_EMBEDDINGS[embedding_choice]["provider"] == "OpenAI":
+        return OpenAIEmbeddings(
+            model=AVAILABLE_EMBEDDINGS[embedding_choice]["name"],
+            openai_api_key=st.secrets["OPENAI_API_KEY"]
+        )
+    else:
+        raise ValueError(f"Unsupported embeddings provider: {AVAILABLE_EMBEDDINGS[embedding_choice]['provider']}")
 
 def get_word_text(doc):
     """Extracts text from a Word document."""
@@ -97,7 +131,6 @@ def get_document_text(docs):
             elif file_extension in ['docx', 'doc']:
                 text += get_word_text(doc)
 
-            # Add a separator between documents
             text += "\n\n"
 
         return text
@@ -143,11 +176,7 @@ def get_text_chunks(text):
 def get_vector_store(text_chunks):
     """Creates and saves a FAISS vector store from text chunks."""
     try:
-        embeddings = HuggingFaceEmbeddings(
-            model_name="BAAI/bge-small-en-v1.5",
-            model_kwargs={'device': 'cpu'},
-            encode_kwargs={'normalize_embeddings': True}
-        )
+        embeddings = get_embeddings_model(st.session_state.selected_embeddings)
         vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
         vector_store.save_local("faiss_index")
         return True
@@ -262,11 +291,7 @@ def compare_models(question, docs):
 def user_input(user_question):
     """Handles user queries by retrieving answers from the vector store."""
     try:
-        embeddings = HuggingFaceEmbeddings(
-            model_name="BAAI/bge-small-en-v1.5",
-            model_kwargs={'device': 'cpu'},
-            encode_kwargs={'normalize_embeddings': True}
-        )
+        embeddings = get_embeddings_model(st.session_state.selected_embeddings)
         new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
         docs = new_db.similarity_search(user_question, k=st.session_state.config['k_value'])
@@ -319,6 +344,7 @@ def reset_app():
         except Exception as e:
             st.error(f"Error clearing index: {str(e)}")
     st.session_state.processing_complete = False
+    st.session_state.selected_embeddings = "BAAI/bge-small-en-v1.5"
     st.session_state.config = {
         'k_value': 4,
         'chunk_size': 1000,
@@ -366,6 +392,24 @@ def main():
             - **Context Length:** {model_info['context_length']} tokens
             - **Temperature Range:** {model_info['temperature_range'][0]} to {model_info['temperature_range'][1]}
             """)
+
+        st.header("Embeddings Selection")
+        selected_embeddings = st.selectbox(
+            "Choose Embeddings Model",
+            options=list(AVAILABLE_EMBEDDINGS.keys()),
+            index=list(AVAILABLE_EMBEDDINGS.keys()).index(st.session_state.selected_embeddings),
+            help="Select the embeddings model to use for document processing"
+        )
+
+        with st.expander("Embeddings Information", expanded=False):
+            embeddings_info = AVAILABLE_EMBEDDINGS[selected_embeddings]
+            st.markdown(f"""
+            **Model:** {selected_embeddings}
+            - **Description:** {embeddings_info['description']}
+            - **Provider:** {embeddings_info['provider']}
+            """)
+
+        st.session_state.selected_embeddings = selected_embeddings
 
         st.subheader("Model Parameters")
         temperature = st.slider(
