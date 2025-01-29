@@ -3,9 +3,10 @@ from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
-from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import create_retrieval_chain
 import os
 import re
 import time
@@ -23,7 +24,7 @@ AVAILABLE_MODELS = {
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.3
     },
-    "Llama-3.3-70b": {
+    "Llama-70b": {
         "name": "llama-3.3-70b-specdec",
         "context_length": 4096,
         "description": "Llama 3.3 70B model",
@@ -112,7 +113,7 @@ def get_text_chunks(text):
 def get_vector_store(text_chunks):
     """Creates and saves a FAISS vector store from text chunks."""
     try:
-        embeddings = HuggingFaceBgeEmbeddings(
+        embeddings = HuggingFaceEmbeddings(
             model_name="BAAI/bge-small-en-v1.5",
             model_kwargs={'device': 'cpu'},
             encode_kwargs={'normalize_embeddings': True}
@@ -152,9 +153,11 @@ def get_conversational_chain():
             model_name=model_config['name'],
             groq_api_key=st.secrets["GROQ_API_KEY"]
         )
-        prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
-        chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
-        return chain
+
+        prompt = PromptTemplate.from_template(prompt_template)
+        document_chain = create_stuff_documents_chain(model, prompt)
+
+        return document_chain
     except Exception as e:
         st.error(f"Error initializing Groq model: {str(e)}")
         return None
@@ -192,25 +195,18 @@ def compare_models(question, docs):
                     Answer (based STRICTLY on the above context):
                     """
 
-                    chain = load_qa_chain(
-                        model,
-                        chain_type="stuff",
-                        prompt=PromptTemplate(
-                            template=prompt_template,
-                            input_variables=["context", "question"]
-                        )
-                    )
+                    prompt = PromptTemplate.from_template(prompt_template)
+                    document_chain = create_stuff_documents_chain(model, prompt)
 
-                    response = chain.invoke(
-                        {"input_documents": docs, "question": question},
-                        config={"return_only_outputs": True}
-                    )
+                    response = document_chain.invoke({
+                        "input_documents": docs,
+                        "question": question
+                    })
 
                     end_time = time.time()
                     response_time = end_time - start_time
 
-                    # Process response text based on model name
-                    response_text = process_model_response(model_name, response['output_text'])
+                    response_text = process_model_response(model_name, response['answer'])
 
                     results[model_name] = {
                         'response': response_text,
@@ -231,48 +227,44 @@ def compare_models(question, docs):
 def user_input(user_question):
     """Handles user queries by retrieving answers from the vector store."""
     try:
-        embeddings = HuggingFaceBgeEmbeddings(
+        embeddings = HuggingFaceEmbeddings(
             model_name="BAAI/bge-small-en-v1.5",
             model_kwargs={'device': 'cpu'},
             encode_kwargs={'normalize_embeddings': True}
         )
         new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
-        docs = new_db.similarity_search(user_question, k=st.session_state.config['k_value'])
+        retriever = new_db.as_retriever(
+            search_kwargs={"k": st.session_state.config['k_value']}
+        )
 
-        if not docs:
-            st.markdown("### Reply:\nI cannot answer this question as it's not covered in the provided documents.")
-            return
-
-        # Show source chunks in expander
-        with st.expander("View source chunks used", expanded=False):
-            st.markdown(f"**Using {st.session_state.config['k_value']} most relevant chunks:**")
-            for i, doc in enumerate(docs, 1):
-                st.markdown(f"**Chunk {i}:**\n{doc.page_content}\n---")
-
-        # Check if comparison is requested
         if getattr(st.session_state, 'show_comparison', False):
+            docs = retriever.get_relevant_documents(user_question)
             compare_models(user_question, docs)
             st.session_state.show_comparison = False
         else:
-            # Regular single model response
             start_time = time.time()
-            chain = get_conversational_chain()
-            if chain is None:
+            document_chain = get_conversational_chain()
+            if document_chain is None:
                 return
 
-            response = chain.invoke(
-                {"input_documents": docs, "question": user_question},
-                config={"return_only_outputs": True}
-            )
+            retrieval_chain = create_retrieval_chain(retriever, document_chain)
+
+            response = retrieval_chain.invoke({
+                "input": user_question
+            })
 
             end_time = time.time()
             response_time = end_time - start_time
 
-            # Process response text based on model name
+            with st.expander("View source chunks used", expanded=False):
+                st.markdown(f"**Using {st.session_state.config['k_value']} most relevant chunks:**")
+                for i, doc in enumerate(response['documents'], 1):
+                    st.markdown(f"**Chunk {i}:**\n{doc.page_content}\n---")
+
             response_text = process_model_response(
                 st.session_state.config['selected_model'],
-                response['output_text']
+                response['answer']
             )
 
             update_model_metrics(st.session_state.config['selected_model'], response_time)
@@ -282,6 +274,7 @@ def user_input(user_question):
 
     except Exception as e:
         st.error(f"Error processing question: {str(e)}")
+
 def reset_app():
     """Resets the application state."""
     if os.path.exists("faiss_index"):
@@ -313,7 +306,6 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        # Validate selected model before creating the selectbox
         validate_selected_model()
 
         # Model Selection
@@ -420,7 +412,6 @@ def main():
         else:
             st.success(f"{len(pdf_docs)} document(s) uploaded!")
 
-            # Show document names
             st.markdown("### Uploaded Documents:")
             for doc in pdf_docs:
                 st.markdown(f"- {doc.name}")
@@ -445,7 +436,6 @@ def main():
     st.markdown("### Ask Questions")
     st.markdown("The assistant will only answer questions based on the uploaded documents.")
 
-    # Question input
     if not st.session_state.processing_complete:
         st.text_input(
             "Your question:",
