@@ -397,7 +397,7 @@ def main():
         selected_embeddings = st.selectbox(
             "Choose Embeddings Model",
             options=list(AVAILABLE_EMBEDDINGS.keys()),
-            index=list(AVAILABLE_EMBEDDINGS.keys()).index(st.session_state.selected_embeddings),
+            index=list(AVAILABLE_EMBEDDINGS.keys()).index(st.session_state.config['selected_embeddings']),
             help="Select the embeddings model to use for document processing"
         )
 
