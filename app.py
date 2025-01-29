@@ -140,7 +140,7 @@ def get_conversational_chain():
         {context}
 
         Question:
-        {question}
+        {input}
 
         Answer (based STRICTLY on the above context):
         """
@@ -155,7 +155,11 @@ def get_conversational_chain():
         )
 
         prompt = PromptTemplate.from_template(prompt_template)
-        document_chain = create_stuff_documents_chain(model, prompt)
+        document_chain = create_stuff_documents_chain(
+            llm=model,
+            prompt=prompt,
+            document_variable_name="context"
+        )
 
         return document_chain
     except Exception as e:
@@ -190,17 +194,21 @@ def compare_models(question, docs):
                     {context}
 
                     Question:
-                    {question}
+                    {input}
 
                     Answer (based STRICTLY on the above context):
                     """
 
                     prompt = PromptTemplate.from_template(prompt_template)
-                    document_chain = create_stuff_documents_chain(model, prompt)
+                    document_chain = create_stuff_documents_chain(
+                        llm=model,
+                        prompt=prompt,
+                        document_variable_name="context"
+                    )
 
                     response = document_chain.invoke({
-                        "input_documents": docs,
-                        "question": question
+                        "input": question,
+                        "context": [doc.page_content for doc in docs]
                     })
 
                     end_time = time.time()
@@ -248,7 +256,11 @@ def user_input(user_question):
             if document_chain is None:
                 return
 
-            retrieval_chain = create_retrieval_chain(retriever, document_chain)
+            retrieval_chain = create_retrieval_chain(
+                retriever,
+                document_chain,
+                input_key="input"
+            )
 
             response = retrieval_chain.invoke({
                 "input": user_question
@@ -274,7 +286,7 @@ def user_input(user_question):
 
     except Exception as e:
         st.error(f"Error processing question: {str(e)}")
-
+        
 def reset_app():
     """Resets the application state."""
     if os.path.exists("faiss_index"):
