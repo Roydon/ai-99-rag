@@ -47,7 +47,7 @@ if 'config' not in st.session_state:
     st.session_state.config = {
         'k_value': 4,
         'chunk_size': 1000,
-        'temperature': 0.1,
+        'temperature': AVAILABLE_MODELS["DeepSeek-R1-70b"]["default_temperature"],
         'chunk_overlap': 200,
         'selected_model': "DeepSeek-R1-70b"
     }
@@ -60,6 +60,9 @@ if 'model_metrics' not in st.session_state:
             'last_used': None
         } for model in AVAILABLE_MODELS
     }
+
+if 'prev_model' not in st.session_state:
+    st.session_state.prev_model = "DeepSeek-R1-70b"
 
 def validate_selected_model():
     """Ensure selected model exists in AVAILABLE_MODELS."""
@@ -283,6 +286,7 @@ def user_input(user_question):
 
     except Exception as e:
         st.error(f"Error processing question: {str(e)}")
+
 def reset_app():
     """Resets the application state."""
     if os.path.exists("faiss_index"):
@@ -295,10 +299,11 @@ def reset_app():
     st.session_state.config = {
         'k_value': 4,
         'chunk_size': 1000,
-        'temperature': 0.1,
+        'temperature': AVAILABLE_MODELS["DeepSeek-R1-70b"]["default_temperature"],
         'chunk_overlap': 200,
         'selected_model': "DeepSeek-R1-70b"
     }
+    st.session_state.prev_model = "DeepSeek-R1-70b"
     st.rerun()
 
 def main():
@@ -323,8 +328,15 @@ def main():
             "Choose Model",
             options=list(AVAILABLE_MODELS.keys()),
             index=list(AVAILABLE_MODELS.keys()).index(st.session_state.config['selected_model']),
-            help="Select the Groq model to use for responses"
+            help="Select the Groq model to use for responses",
+            key='model_selector'
         )
+
+        # Update temperature when model changes
+        if st.session_state.prev_model != selected_model:
+            st.session_state.config['temperature'] = AVAILABLE_MODELS[selected_model]['default_temperature']
+            st.session_state.prev_model = selected_model
+            st.session_state.config['selected_model'] = selected_model
 
         # Model Information
         with st.expander("Model Information", expanded=False):
