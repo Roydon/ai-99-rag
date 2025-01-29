@@ -36,13 +36,6 @@ AVAILABLE_MODELS = {
         "description": "DeepSeek 70B distilled model",
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.3
-    },
-    "Gemma2-9b": {
-        "name": "gemma2-9b-it",
-        "context_length": 8192,
-        "description": "Gemma 9B instruction-tuned model",
-        "temperature_range": (0.0, 1.0),
-        "default_temperature": 0.2
     }
 }
 
