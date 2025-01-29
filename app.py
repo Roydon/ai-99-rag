@@ -58,6 +58,8 @@ def get_conversational_chain():
         DO NOT use any external knowledge or make assumptions beyond what's in the context.
         If you're unsure about any part of the answer, err on the side of saying the information is not available.
 
+        Keep the font syle of the response text uniform, do not use any variation in font syle
+
         Context:
         {context}
 
