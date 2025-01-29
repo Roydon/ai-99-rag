@@ -256,10 +256,10 @@ def user_input(user_question):
             if document_chain is None:
                 return
 
+            # Create retrieval chain without input_key parameter
             retrieval_chain = create_retrieval_chain(
                 retriever,
-                document_chain,
-                input_key="input"
+                document_chain
             )
 
             response = retrieval_chain.invoke({
@@ -286,7 +286,7 @@ def user_input(user_question):
 
     except Exception as e:
         st.error(f"Error processing question: {str(e)}")
-        
+             
 def reset_app():
     """Resets the application state."""
     if os.path.exists("faiss_index"):
