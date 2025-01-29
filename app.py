@@ -87,7 +87,8 @@ def user_input(user_question):
             return_only_outputs=True
         )
 
-        st.markdown(f"### Reply:\n{response['output_text']}")
+        # st.markdown(f"### Reply:\n{response['output_text']}")
+        st.markdown(f"### Reply:\n{response}")
     except Exception as e:
         st.error(f"Error processing question: {str(e)}")
 
