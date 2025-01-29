@@ -66,10 +66,8 @@ if 'config' not in st.session_state:
         'temperature': AVAILABLE_MODELS["DeepSeek-R1-70b"]["default_temperature"],
         'chunk_overlap': 200,
         'selected_model': "DeepSeek-R1-70b"
+        'selected_embeddings': "BGE-small-en-v1.5"
     }
-
-if 'selected_embeddings' not in st.session_state:
-    st.session_state.selected_embeddings = AVAILABLE_EMBEDDINGS["BGE-small-en-v1.5"]
 
 if 'model_metrics' not in st.session_state:
     st.session_state.model_metrics = {
@@ -85,19 +83,24 @@ if 'prev_model' not in st.session_state:
 
 def get_embeddings_model(embedding_choice):
     """Returns the appropriate embeddings model based on selection."""
-    if AVAILABLE_EMBEDDINGS[embedding_choice]["provider"] == "HuggingFace":
-        return HuggingFaceEmbeddings(
-            model_name=AVAILABLE_EMBEDDINGS[embedding_choice]["name"],
-            model_kwargs={'device': 'cpu'},
-            encode_kwargs={'normalize_embeddings': True}
-        )
-    elif AVAILABLE_EMBEDDINGS[embedding_choice]["provider"] == "OpenAI":
-        return OpenAIEmbeddings(
-            model=AVAILABLE_EMBEDDINGS[embedding_choice]["name"],
-            openai_api_key=st.secrets["OPENAI_API_KEY"]
-        )
-    else:
-        raise ValueError(f"Unsupported embeddings provider: {AVAILABLE_EMBEDDINGS[embedding_choice]['provider']}")
+    embedding_config = AVAILABLE_EMBEDDINGS[embedding_choice]
+    try:
+        if embedding_config["provider"] == "HuggingFace":
+            return HuggingFaceEmbeddings(
+                model_name=embedding_config["name"],
+                model_kwargs={'device': 'cpu'},
+                encode_kwargs={'normalize_embeddings': True}
+            )
+        elif embedding_config["provider"] == "OpenAI":
+            return OpenAIEmbeddings(
+                model=embedding_config["name"],
+                openai_api_key=st.secrets["OPENAI_API_KEY"]
+            )
+        else:
+            raise ValueError(f"Unsupported embeddings provider: {embedding_config['provider']}")
+    except Exception as e:
+        st.error(f"Error initializing embeddings model: {str(e)}")
+        return None
 
 def get_word_text(doc):
     """Extracts text from a Word document."""
@@ -141,7 +144,7 @@ def get_document_text(docs):
 def validate_selected_model():
     """Ensure selected model exists in AVAILABLE_MODELS."""
     if st.session_state.config['selected_model'] not in AVAILABLE_MODELS:
-        st.session_state.config['selected_model'] = list(AVAILABLE_MODELS.keys())[0]
+        st.session_state.config['selected_model'] = "DeepSeek-R1-70b"
 
 def process_model_response(model_name, response_text):
     """Process model response based on model name."""
@@ -176,7 +179,10 @@ def get_text_chunks(text):
 def get_vector_store(text_chunks):
     """Creates and saves a FAISS vector store from text chunks."""
     try:
-        embeddings = get_embeddings_model(st.session_state.selected_embeddings)
+        embeddings = get_embeddings_model(st.session_state.config['selected_embeddings'])
+        if embeddings is None:
+            return False
+
         vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
         vector_store.save_local("faiss_index")
         return True
@@ -291,7 +297,7 @@ def compare_models(question, docs):
 def user_input(user_question):
     """Handles user queries by retrieving answers from the vector store."""
     try:
-        embeddings = get_embeddings_model(st.session_state.selected_embeddings)
+        embeddings = get_embeddings_model(st.session_state.config['selected_embeddings'])
         new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
         docs = new_db.similarity_search(user_question, k=st.session_state.config['k_value'])
@@ -344,13 +350,13 @@ def reset_app():
         except Exception as e:
             st.error(f"Error clearing index: {str(e)}")
     st.session_state.processing_complete = False
-    st.session_state.selected_embeddings = AVAILABLE_EMBEDDINGS["BGE-small-en-v1.5"]
     st.session_state.config = {
         'k_value': 4,
         'chunk_size': 1000,
         'temperature': AVAILABLE_MODELS["DeepSeek-R1-70b"]["default_temperature"],
         'chunk_overlap': 200,
-        'selected_model': "DeepSeek-R1-70b"
+        'selected_model': "DeepSeek-R1-70b",
+        'selected_embeddings': "BGE-small-en-v1.5"
     }
     st.session_state.prev_model = "DeepSeek-R1-70b"
     st.rerun()
@@ -401,6 +407,9 @@ def main():
             help="Select the embeddings model to use for document processing"
         )
 
+        # Update config with selected embeddings
+        st.session_state.config['selected_embeddings'] = selected_embeddings
+
         with st.expander("Embeddings Information", expanded=False):
             embeddings_info = AVAILABLE_EMBEDDINGS[selected_embeddings]
             st.markdown(f"""
@@ -409,7 +418,7 @@ def main():
             - **Provider:** {embeddings_info['provider']}
             """)
 
-        st.session_state.selected_embeddings = selected_embeddings
+        st.session_state.config['selected_embeddings'] = selected_embeddings
 
         st.subheader("Model Parameters")
         temperature = st.slider(
