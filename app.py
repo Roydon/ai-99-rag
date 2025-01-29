@@ -30,7 +30,7 @@ AVAILABLE_MODELS = {
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.1
     },
-    "DeepSeek-70b": {
+    "DeepSeek-R1-70b": {
         "name": "deepseek-r1-distill-llama-70b",
         "context_length": 4096,
         "description": "DeepSeek 70B distilled model",
@@ -49,7 +49,7 @@ if 'config' not in st.session_state:
         'chunk_size': 1000,
         'temperature': 0.1,
         'chunk_overlap': 200,
-        'selected_model': "DeepSeek-70b"
+        'selected_model': "DeepSeek-R1-70b"
     }
 
 if 'model_metrics' not in st.session_state:
@@ -61,12 +61,14 @@ if 'model_metrics' not in st.session_state:
         } for model in AVAILABLE_MODELS
     }
 
-# Get API key from Streamlit secrets
-groq_api_key = st.secrets["GROQ_API_KEY"]
+def validate_selected_model():
+    """Ensure selected model exists in AVAILABLE_MODELS."""
+    if st.session_state.config['selected_model'] not in AVAILABLE_MODELS:
+        st.session_state.config['selected_model'] = list(AVAILABLE_MODELS.keys())[0]
 
 def process_model_response(model_name, response_text):
     """Process model response based on model name."""
-    if model_name.lower().startswith('deepseek'):
+    if 'deepseek' in model_name.lower():
         return re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL).strip()
     return response_text
 
@@ -148,7 +150,7 @@ def get_conversational_chain():
         model = ChatGroq(
             temperature=st.session_state.config['temperature'],
             model_name=model_config['name'],
-            groq_api_key=groq_api_key
+            groq_api_key=st.secrets["GROQ_API_KEY"]
         )
         prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
         chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
@@ -173,7 +175,7 @@ def compare_models(question, docs):
                     model = ChatGroq(
                         temperature=st.session_state.config['temperature'],
                         model_name=model_config['name'],
-                        groq_api_key=groq_api_key
+                        groq_api_key=st.secrets["GROQ_API_KEY"]
                     )
 
                     prompt_template = """
@@ -295,7 +297,7 @@ def reset_app():
         'chunk_size': 1000,
         'temperature': 0.1,
         'chunk_overlap': 200,
-        'selected_model': "DeepSeek-70b"
+        'selected_model': "DeepSeek-R1-70b"
     }
     st.rerun()
 
@@ -312,6 +314,9 @@ def main():
 
     # Sidebar
     with st.sidebar:
+        # Validate selected model before creating the selectbox
+        validate_selected_model()
+
         # Model Selection
         st.header("Model Selection")
         selected_model = st.selectbox(
