@@ -1,5 +1,6 @@
 import streamlit as st
 from PyPDF2 import PdfReader
+from docx import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
@@ -64,6 +65,46 @@ if 'model_metrics' not in st.session_state:
 if 'prev_model' not in st.session_state:
     st.session_state.prev_model = "DeepSeek-R1-70b"
 
+def get_word_text(doc):
+    """Extracts text from a Word document."""
+    try:
+        document = Document(doc)
+        text = ""
+        for paragraph in document.paragraphs:
+            text += paragraph.text + "\n"
+        for table in document.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    text += cell.text + " "
+                text += "\n"
+        return text
+    except Exception as e:
+        st.error(f"Error reading Word document: {str(e)}")
+        return None
+
+def get_document_text(docs):
+    """Extracts text from uploaded PDF and Word documents."""
+    text = ""
+    try:
+        for doc in docs:
+            file_extension = doc.name.lower().split('.')[-1]
+
+            if file_extension == 'pdf':
+                pdf_reader = PdfReader(doc)
+                for page in pdf_reader.pages:
+                    text += page.extract_text()
+
+            elif file_extension in ['docx', 'doc']:
+                text += get_word_text(doc)
+
+            # Add a separator between documents
+            text += "\n\n"
+
+        return text
+    except Exception as e:
+        st.error(f"Error reading document: {str(e)}")
+        return None
+
 def validate_selected_model():
     """Ensure selected model exists in AVAILABLE_MODELS."""
     if st.session_state.config['selected_model'] not in AVAILABLE_MODELS:
@@ -83,19 +124,6 @@ def update_model_metrics(model_name, response_time):
         (metrics['avg_response_time'] * (metrics['uses'] - 1) + response_time) / metrics['uses']
     )
     metrics['last_used'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-def get_pdf_text(pdf_docs):
-    """Extracts text from uploaded PDF files."""
-    text = ""
-    try:
-        for pdf in pdf_docs:
-            pdf_reader = PdfReader(pdf)
-            for page in pdf_reader.pages:
-                text += page.extract_text()
-        return text
-    except Exception as e:
-        st.error(f"Error reading PDF: {str(e)}")
-        return None
 
 def get_text_chunks(text):
     """Splits extracted text into manageable chunks."""
@@ -137,7 +165,7 @@ def get_conversational_chain():
 
         DO NOT use any external knowledge or make assumptions beyond what's in the context.
         If you're unsure about any part of the answer, err on the side of saying the information is not available.
-        Keep the fornt style uniform in the response.
+        Keep the font style uniform in the response.
 
         Context:
         {context}
@@ -213,7 +241,6 @@ def compare_models(question, docs):
                     end_time = time.time()
                     response_time = end_time - start_time
 
-                    # Process response text based on model name
                     response_text = process_model_response(model_name, response['output_text'])
 
                     results[model_name] = {
@@ -248,18 +275,15 @@ def user_input(user_question):
             st.markdown("### Reply:\nI cannot answer this question as it's not covered in the provided documents.")
             return
 
-        # Show source chunks in expander
         with st.expander("View source chunks used", expanded=False):
             st.markdown(f"**Using {st.session_state.config['k_value']} most relevant chunks:**")
             for i, doc in enumerate(docs, 1):
                 st.markdown(f"**Chunk {i}:**\n{doc.page_content}\n---")
 
-        # Check if comparison is requested
         if getattr(st.session_state, 'show_comparison', False):
             compare_models(user_question, docs)
             st.session_state.show_comparison = False
         else:
-            # Regular single model response
             start_time = time.time()
             chain = get_conversational_chain()
             if chain is None:
@@ -273,7 +297,6 @@ def user_input(user_question):
             end_time = time.time()
             response_time = end_time - start_time
 
-            # Process response text based on model name
             response_text = process_model_response(
                 st.session_state.config['selected_model'],
                 response['output_text']
@@ -319,10 +342,8 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        # Validate selected model before creating the selectbox
         validate_selected_model()
 
-        # Model Selection
         st.header("Model Selection")
         selected_model = st.selectbox(
             "Choose Model",
@@ -332,13 +353,11 @@ def main():
             key='model_selector'
         )
 
-        # Update temperature when model changes
         if st.session_state.prev_model != selected_model:
             st.session_state.config['temperature'] = AVAILABLE_MODELS[selected_model]['default_temperature']
             st.session_state.prev_model = selected_model
             st.session_state.config['selected_model'] = selected_model
 
-        # Model Information
         with st.expander("Model Information", expanded=False):
             model_info = AVAILABLE_MODELS[selected_model]
             st.markdown(f"""
@@ -348,7 +367,6 @@ def main():
             - **Temperature Range:** {model_info['temperature_range'][0]} to {model_info['temperature_range'][1]}
             """)
 
-        # Model Parameters
         st.subheader("Model Parameters")
         temperature = st.slider(
             "Temperature",
@@ -359,7 +377,6 @@ def main():
             help="Controls randomness in the response. Lower values make responses more focused."
         )
 
-        # Chunk Parameters
         st.subheader("Chunk Parameters")
         col1, col2 = st.columns(2)
         with col1:
@@ -382,7 +399,6 @@ def main():
                 help="Overlap between chunks"
             )
 
-        # Search Parameters
         st.subheader("Search Parameters")
         k_value = st.slider(
             "Number of chunks (k)",
@@ -392,12 +408,10 @@ def main():
             help="Number of relevant chunks to use for answering"
         )
 
-        # Model Comparison
         st.subheader("Model Comparison")
         if st.button("Compare Models"):
             st.session_state.show_comparison = True
 
-        # Update configuration
         st.session_state.config.update({
             'temperature': temperature,
             'chunk_size': chunk_size,
@@ -406,7 +420,6 @@ def main():
             'selected_model': selected_model
         })
 
-        # Model Metrics
         if st.checkbox("Show Model Metrics"):
             st.markdown("### Model Usage Metrics")
             for model, metrics in st.session_state.model_metrics.items():
@@ -419,30 +432,28 @@ def main():
 
         st.markdown("---")
 
-        # Document Upload Section
         st.header("Document Upload")
-        pdf_docs = st.file_uploader(
-            "Upload PDF documents:",
+        uploaded_docs = st.file_uploader(
+            "Upload documents:",
             accept_multiple_files=True,
-            type=["pdf"]
+            type=["pdf", "docx", "doc"]
         )
 
-        if not pdf_docs:
-            st.info("Please upload PDF documents to begin.")
+        if not uploaded_docs:
+            st.info("Please upload PDF or Word documents to begin.")
             st.button("Process Documents", disabled=True)
         else:
-            st.success(f"{len(pdf_docs)} document(s) uploaded!")
+            st.success(f"{len(uploaded_docs)} document(s) uploaded!")
 
-            # Show document names
             st.markdown("### Uploaded Documents:")
-            for doc in pdf_docs:
+            for doc in uploaded_docs:
                 st.markdown(f"- {doc.name}")
 
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Process Documents", type="primary", key="process"):
                     with st.spinner("Processing documents..."):
-                        raw_text = get_pdf_text(pdf_docs)
+                        raw_text = get_document_text(uploaded_docs)
                         if raw_text:
                             text_chunks = get_text_chunks(raw_text)
                             if text_chunks and get_vector_store(text_chunks):
@@ -454,11 +465,9 @@ def main():
                 if st.button("Clear All", type="secondary", key="clear"):
                     reset_app()
 
-    # Main chat interface
     st.markdown("### Ask Questions")
     st.markdown("The assistant will only answer questions based on the uploaded documents.")
 
-    # Question input
     if not st.session_state.processing_complete:
         st.text_input(
             "Your question:",
@@ -475,7 +484,6 @@ def main():
             with st.spinner("Finding answer..."):
                 user_input(user_question)
 
-    # Footer
     st.markdown("---")
     st.markdown(
         """
