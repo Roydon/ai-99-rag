@@ -13,6 +13,15 @@ import re
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
 
+# Initialize configuration defaults
+if 'config' not in st.session_state:
+    st.session_state.config = {
+        'k_value': 4,
+        'chunk_size': 1000,
+        'temperature': 0.1,
+        'chunk_overlap': 200
+    }
+
 # Get API keys from Streamlit secrets
 groq_api_key = st.secrets["GROQ_API_KEY"]
 
@@ -33,8 +42,8 @@ def get_text_chunks(text):
     """Splits extracted text into manageable chunks."""
     try:
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
+            chunk_size=st.session_state.config['chunk_size'],
+            chunk_overlap=st.session_state.config['chunk_overlap'],
             length_function=len,
             separators=["\n\n", "\n", " ", ""]
         )
@@ -66,10 +75,9 @@ def get_conversational_chain():
         You are a specialized assistant that ONLY answers questions based on the provided context.
         If the question cannot be answered using the information in the context, respond with:
         "I cannot answer this question as it's not covered in the provided documents."
-
+        
         DO NOT use any external knowledge or make assumptions beyond what's in the context.
         If you're unsure about any part of the answer, err on the side of saying the information is not available.
-        Keep the font syle of the response text uniform, do not use any variation in font syle
 
         Context:
         {context}
@@ -81,7 +89,7 @@ def get_conversational_chain():
         """
 
         model = ChatGroq(
-            temperature=0.1,
+            temperature=st.session_state.config['temperature'],
             model_name="deepseek-r1-distill-llama-70b",
             groq_api_key=groq_api_key
         )
@@ -101,12 +109,18 @@ def user_input(user_question):
             encode_kwargs={'normalize_embeddings': True}
         )
         new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-
-        docs = new_db.similarity_search(user_question, k=4)
-
+        
+        docs = new_db.similarity_search(user_question, k=st.session_state.config['k_value'])
+        
         if not docs:
             st.markdown("### Reply:\nI cannot answer this question as it's not covered in the provided documents.")
             return
+
+        # Show source chunks in expander
+        with st.expander("View source chunks used", expanded=False):
+            st.markdown(f"**Using {st.session_state.config['k_value']} most relevant chunks:**")
+            for i, doc in enumerate(docs, 1):
+                st.markdown(f"**Chunk {i}:**\n{doc.page_content}\n---")
 
         chain = get_conversational_chain()
         if chain is None:
@@ -131,6 +145,12 @@ def reset_app():
         except Exception as e:
             st.error(f"Error clearing index: {str(e)}")
     st.session_state.processing_complete = False
+    st.session_state.config = {
+        'k_value': 4,
+        'chunk_size': 1000,
+        'temperature': 0.1,
+        'chunk_overlap': 200
+    }
     st.rerun()
 
 def main():
@@ -146,27 +166,86 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        st.header("Document Upload")
-        st.markdown("Upload documents to ground the chatbot's knowledge.")
+        # Configuration Section
+        st.header("Configuration")
+        
+        # Model Parameters
+        st.subheader("Model Parameters")
+        temperature = st.slider(
+            "Temperature",
+            min_value=0.0,
+            max_value=1.0,
+            value=st.session_state.config['temperature'],
+            step=0.1,
+            help="Controls randomness in the response. Lower values make responses more focused."
+        )
 
+        # Chunk Parameters
+        st.subheader("Chunk Parameters")
+        col1, col2 = st.columns(2)
+        with col1:
+            chunk_size = st.number_input(
+                "Chunk Size",
+                min_value=100,
+                max_value=2000,
+                value=st.session_state.config['chunk_size'],
+                step=100,
+                help="Size of text chunks during processing"
+            )
+        
+        with col2:
+            chunk_overlap = st.number_input(
+                "Chunk Overlap",
+                min_value=0,
+                max_value=500,
+                value=st.session_state.config['chunk_overlap'],
+                step=50,
+                help="Overlap between chunks"
+            )
+
+        # Search Parameters
+        st.subheader("Search Parameters")
+        k_value = st.slider(
+            "Number of chunks (k)",
+            min_value=1,
+            max_value=10,
+            value=st.session_state.config['k_value'],
+            help="Number of relevant chunks to use for answering"
+        )
+
+        # Update configuration
+        st.session_state.config.update({
+            'temperature': temperature,
+            'chunk_size': chunk_size,
+            'chunk_overlap': chunk_overlap,
+            'k_value': k_value
+        })
+
+        # Reset configuration button
+        if st.button("Reset Configuration"):
+            reset_app()
+
+        st.markdown("---")
+
+        # Document Upload Section
+        st.header("Document Upload")
         pdf_docs = st.file_uploader(
             "Upload PDF documents:",
             accept_multiple_files=True,
             type=["pdf"]
         )
-
-        # Document processing section
+        
         if not pdf_docs:
             st.info("Please upload PDF documents to begin.")
             st.button("Process Documents", disabled=True)
         else:
             st.success(f"{len(pdf_docs)} document(s) uploaded!")
-
+            
             # Show document names
             st.markdown("### Uploaded Documents:")
             for doc in pdf_docs:
                 st.markdown(f"- {doc.name}")
-
+            
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Process Documents", type="primary", key="process"):
@@ -178,7 +257,7 @@ def main():
                                 st.session_state.processing_complete = True
                                 st.success("Documents processed successfully!")
                                 st.rerun()
-
+            
             with col2:
                 if st.button("Clear All", type="secondary", key="clear"):
                     reset_app()
@@ -193,7 +272,7 @@ def main():
                 st.success("Uploaded")
             else:
                 st.error("Not uploaded")
-
+        
         with col2:
             st.markdown("Processing:")
             if st.session_state.processing_complete:
@@ -229,10 +308,11 @@ def main():
             """
             **Guidelines:**
             1. Upload PDF documents
-            2. Click 'Process Documents'
-            3. Ask questions about the documents
-            4. Use 'Clear All' to reset
-
+            2. Adjust configuration if needed
+            3. Click 'Process Documents'
+            4. Ask questions about the documents
+            5. Use 'Clear All' to reset
+            
             **Note:** This assistant only answers questions based on the uploaded documents.
             """
         )
