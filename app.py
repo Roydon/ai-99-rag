@@ -304,13 +304,13 @@ def reset_app():
 def main():
     """Main function to run the Streamlit app."""
     st.set_page_config(
-        page_title="Multi-Model Document Chat",
+        page_title="AI Powered Document Chat",
         page_icon="🤖",
         layout="wide",
         initial_sidebar_state="expanded"
     )
 
-    st.title("Multi-Model Document-Grounded Chat Assistant")
+    st.title("AI Powered Document-Grounded Chat Assistant")
 
     # Sidebar
     with st.sidebar:
@@ -469,7 +469,7 @@ def main():
         """
         <div style='text-align: center'>
             <p style='color: #666; font-size: 0.8em;'>
-                Multi-Model Document-Grounded Chat Assistant | Powered by Groq
+                AI Powered Document-Grounded Chat Assistant | Powered by Groq
             </p>
         </div>
         """,
