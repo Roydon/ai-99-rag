@@ -8,6 +8,7 @@ from langchain_groq import ChatGroq
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
+import re
 
 # Get API keys from Streamlit secrets
 groq_api_key = st.secrets["GROQ_API_KEY"]
@@ -88,7 +89,8 @@ def user_input(user_question):
         )
 
         # st.markdown(f"### Reply:\n{response['output_text']}")
-        st.markdown(f"### Reply:\n{response}")
+        response_text = re.sub(r'<think>.*?</think>', '', response['output_text'], flags=re.DOTALL).strip()
+        st.markdown(f"### Reply:\n{response_text}")
     except Exception as e:
         st.error(f"Error processing question: {str(e)}")
 
