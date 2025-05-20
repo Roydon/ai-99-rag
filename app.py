@@ -19,17 +19,10 @@ os.environ['STREAMLIT_SERVER_FILE_WATCHER_TYPE'] = 'none'
 
 # Model Configurations
 AVAILABLE_MODELS = {
-    "Mixtral-8x7b": {
-        "name": "mixtral-8x7b-32768",
-        "context_length": 32768,
-        "description": "Mixtral 8x7B model with extended context",
-        "temperature_range": (0.0, 1.0),
-        "default_temperature": 0.3
-    },
-    "Llama-3.3-70b": {
-        "name": "llama-3.3-70b-specdec",
-        "context_length": 4096,
-        "description": "Llama 3.3 70B model",
+    "Gemma-2-9b": {
+        "name": "gemma-2-9b-it",
+        "context_length": 8192,
+        "description": "Gemma 2 9B IT model from Google",
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.3
     },
