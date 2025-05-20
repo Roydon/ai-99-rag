@@ -8,6 +8,7 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import OpenAIEmbeddings
+from langchain_cohere import CohereEmbeddings
 import os
 import re
 import time
@@ -59,6 +60,11 @@ AVAILABLE_EMBEDDINGS = {
         "name": "text-embedding-3-small",
         "description": "OpenAI's text embedding model",
         "provider": "OpenAI"
+    },
+    "Cohere-embed-english-v3.0": {
+        "name": "embed-english-v3.0",
+        "description": "Cohere embed-english-v3.0 model - high performance for semantic search.",
+        "provider": "Cohere"
     }
 }
 
@@ -102,6 +108,11 @@ def get_embeddings_model(embedding_choice):
             return OpenAIEmbeddings(
                 model=embedding_config["name"],
                 openai_api_key=st.secrets["OPENAI_API_KEY"]
+            )
+        elif embedding_config["provider"] == "Cohere": # New condition
+            return CohereEmbeddings(
+                model=embedding_config["name"],
+                cohere_api_key=st.secrets["COHERE_API_KEY"] # Ensure this secret is available
             )
         else:
             raise ValueError(f"Unsupported embeddings provider: {embedding_config['provider']}")
