@@ -33,12 +33,12 @@ AVAILABLE_MODELS = {
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.3
     },
-    "Llama-Guard-4-12B": {
-        "name": "meta-llama/Llama-Guard-4-12B",
-        "context_length": 131072,
-        "description": "Meta Llama Guard 4 12B model - specialized for moderation and safety tasks.",
+    "Llama-Scout-4-17B-Instruct": {
+        "name": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "context_length": 1024,
+        "description": "Meta Llama Scout 4 17B Instruct Model",
         "temperature_range": (0.0, 1.0),
-        "default_temperature": 0.2
+        "default_temperature": 0.3
     }
 }
 
