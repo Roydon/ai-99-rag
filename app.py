@@ -199,7 +199,7 @@ def validate_selected_model():
 
 def process_model_response(model_name, response_text):
     """Process model response based on model name."""
-    if name.startswith(("deepseek", "qwen")):
+    if model_name.startswith(("deepseek", "qwen")):
         return re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL).strip()
     return response_text
     
