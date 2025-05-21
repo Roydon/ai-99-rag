@@ -20,8 +20,8 @@ os.environ['STREAMLIT_SERVER_FILE_WATCHER_TYPE'] = 'none'
 # Model Configurations
 AVAILABLE_MODELS = {
     "Gemma-2-9b": {
-        "name": "gemma-2-9b-it",
-        "context_length": 8192,
+        "name": "gemma2-9b-it",
+        "context_length": 1024,
         "description": "Gemma 2 9B IT model from Google",
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.3
