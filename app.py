@@ -9,6 +9,9 @@ from langchain.prompts import PromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_cohere import CohereEmbeddings
+from langchain_voyageai import VoyageAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
 import os
 import re
 import time
@@ -39,6 +42,13 @@ AVAILABLE_MODELS = {
         "description": "Meta Llama Scout 4 17B Instruct Model",
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.3
+    },
+    "qwen-qwq-32b": {
+        "name": "qwen-qwq-32b",
+        "context_length": 4096,
+        "description": "Qwen QWQ 32B model from Alibaba Cloud",
+        "temperature_range": (0.0, 1.0),
+        "default_temperature": 0.3
     }
 }
 
@@ -58,6 +68,21 @@ AVAILABLE_EMBEDDINGS = {
         "name": "embed-english-v3.0",
         "description": "Cohere embed-english-v3.0 model - high performance for semantic search.",
         "provider": "Cohere"
+    },
+    "Voyage-3-lite": {
+        "name": "voyage-3-lite",
+        "description": "VoyageAI embedding model optimized for latency and cost.",
+        "provider": "VoyageAI"
+    },
+    "Google-text-embedding-004": {
+        "name": "models/text-embedding-004",
+        "description": "Google text embedding model for strong retrieval performance.",
+        "provider": "Google"
+    },
+    "Nvidia-NV-Embed-v2": {
+        "name": "nvidia/nv-embedqa", # Placeholder, actual API model name might differ or depend on SDK
+        "description": "Nvidia text embedding model.",
+        "provider": "Nvidia"
     }
 }
 
@@ -106,6 +131,21 @@ def get_embeddings_model(embedding_choice):
             return CohereEmbeddings(
                 model=embedding_config["name"],
                 cohere_api_key=st.secrets["COHERE_API_KEY"] # Ensure this secret is available
+            )
+        elif embedding_config["provider"] == "VoyageAI":
+            return VoyageAIEmbeddings(
+                model=embedding_config["name"],
+                voyage_api_key=st.secrets["VOYAGE_API_KEY"]
+            )
+        elif embedding_config["provider"] == "Google":
+            return GoogleGenerativeAIEmbeddings(
+                model=embedding_config["name"],
+                google_api_key=st.secrets["GOOGLE_API_KEY"]
+            )
+        elif embedding_config["provider"] == "Nvidia":
+            return NVIDIAEmbeddings( # Assuming model parameter is 'model'
+                model=embedding_config["name"],
+                nvidia_api_key=st.secrets["NVIDIA_API_KEY"]
             )
         else:
             raise ValueError(f"Unsupported embeddings provider: {embedding_config['provider']}")
