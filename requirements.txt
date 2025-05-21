@@ -7,6 +7,9 @@ langchain-groq>=0.0.5
 langchain-huggingface>=0.0.5
 langchain-openai
 langchain-cohere
+langchain-voyageai
+langchain-google-genai
+langchain-nvidia-ai-endpoints
 faiss-cpu>=1.7.4
 python-dotenv>=1.0.0
 sentence-transformers>=2.2.2
