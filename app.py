@@ -199,12 +199,8 @@ def validate_selected_model():
 
 def process_model_response(model_name, response_text):
     """Process model response based on model name."""
-    model_lower = model_name.lower()
-    if model_lower.startswith('deepseek') or model_lower.startswith('qwen'):
-        # Extract text between  tags
-        match = re.search(r'(.*?)', response_text, flags=re.DOTALL)
-        if match:
-            return match.group(1).strip()
+    if name.startswith(("deepseek", "qwen")):
+        return re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL).strip()
     return response_text
     
 def update_model_metrics(model_name, response_time):
