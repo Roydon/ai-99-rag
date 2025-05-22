@@ -80,7 +80,7 @@ AVAILABLE_EMBEDDINGS = {
         "provider": "Google"
     },
     "Nvidia-NV-Embed-v2": {
-        "name": "nvidia/nv-embedqa", # Placeholder, actual API model name might differ or depend on SDK
+        "name": "NV-Embed-QA",
         "description": "Nvidia text embedding model.",
         "provider": "Nvidia"
     }
@@ -143,7 +143,7 @@ def get_embeddings_model(embedding_choice):
                 google_api_key=st.secrets["GOOGLE_API_KEY"]
             )
         elif embedding_config["provider"] == "Nvidia":
-            return NVIDIAEmbeddings( # Assuming model parameter is 'model'
+            return NVIDIAEmbeddings(
                 model=embedding_config["name"],
                 nvidia_api_key=st.secrets["NVIDIA_API_KEY"]
             )
