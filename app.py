@@ -4,7 +4,7 @@ from docx import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
-from langchain.chains.question_answering import load_qa_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.prompts import PromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import OpenAIEmbeddings
@@ -271,7 +271,7 @@ def get_conversational_chain():
             groq_api_key=st.secrets["GROQ_API_KEY"]
         )
         prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
-        chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
+        chain = create_stuff_documents_chain(model, prompt)
         return chain
     except Exception as e:
         st.error(f"Error initializing Groq model: {str(e)}")
@@ -310,24 +310,22 @@ def compare_models(question, docs):
                     Answer (based STRICTLY on the above context):
                     """
 
-                    chain = load_qa_chain(
-                        model,
-                        chain_type="stuff",
-                        prompt=PromptTemplate(
-                            template=prompt_template,
-                            input_variables=["context", "question"]
-                        )
+                    prompt = PromptTemplate(
+                        template=prompt_template,
+                        input_variables=["context", "question"]
                     )
+                    chain = create_stuff_documents_chain(model, prompt)
 
                     response = chain.invoke(
-                        {"input_documents": docs, "question": question},
-                        config={"return_only_outputs": True}
+                        {"context": docs, "question": question}
+                        # return_only_outputs is not a standard parameter for invoke with this chain type.
+                        # The response itself is the string.
                     )
 
                     end_time = time.time()
                     response_time = end_time - start_time
 
-                    response_text = process_model_response(model_name, response['output_text'])
+                    response_text = process_model_response(model_name, response)
 
                     results[model_name] = {
                         'response': response_text,
@@ -372,8 +370,8 @@ def user_input(user_question):
                 return
 
             response = chain.invoke(
-                {"input_documents": docs, "question": user_question},
-                config={"return_only_outputs": True}
+                {"context": docs, "question": user_question}
+                # config={"return_only_outputs": True} # Not applicable here, response is the string.
             )
 
             end_time = time.time()
@@ -381,7 +379,7 @@ def user_input(user_question):
 
             response_text = process_model_response(
                 st.session_state.config['selected_model'],
-                response['output_text']
+                response
             )
 
             update_model_metrics(st.session_state.config['selected_model'], response_time)
