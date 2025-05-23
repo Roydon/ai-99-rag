@@ -16,6 +16,8 @@ import os
 import re
 import time
 from datetime import datetime
+import requests
+from bs4 import BeautifulSoup
 
 # Disable file watcher to prevent inotify issues
 os.environ['STREAMLIT_SERVER_FILE_WATCHER_TYPE'] = 'none'
@@ -89,6 +91,9 @@ AVAILABLE_EMBEDDINGS = {
 # Initialize session states
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
+
+if 'url_input' not in st.session_state:
+    st.session_state.url_input = ""
 
 if 'config' not in st.session_state:
     st.session_state.config = {
@@ -171,8 +176,10 @@ def get_word_text(doc):
         return None
 
 def get_document_text(docs):
-    """Extracts text from uploaded PDF and Word documents."""
+    """Extracts text from uploaded PDF and Word documents and a URL."""
     text = ""
+    url = st.session_state.get('url_input', '')
+
     try:
         for doc in docs:
             file_extension = doc.name.lower().split('.')[-1]
@@ -181,15 +188,64 @@ def get_document_text(docs):
                 pdf_reader = PdfReader(doc)
                 for page in pdf_reader.pages:
                     text += page.extract_text()
-
             elif file_extension in ['docx', 'doc']:
                 text += get_word_text(doc)
-
             text += "\n\n"
 
+        if url:
+            st.session_state.url_processed_successfully = False # Initialize as False
+            try:
+                response = requests.get(url, timeout=15) # Added timeout
+                response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+                
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                url_text_parts = []
+                # Extract text from common content tags
+                content_tags = soup.find_all(['p', 'article', 'main', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'span', 'div'])
+                for tag in content_tags:
+                    url_text_parts.append(tag.get_text(separator=" ", strip=True))
+                
+                url_text = "\n".join(url_text_parts)
+
+                if not url_text.strip(): # Fallback or if primary extraction yields minimal text
+                    url_text = soup.get_text(separator=" ", strip=True)
+
+                if not url_text.strip():
+                    st.warning(f"The URL ({url}) was fetched and parsed, but no text content was found.")
+                    # url_processed_successfully remains False
+                else:
+                    text += url_text + "\n\n"
+                    st.session_state.url_processed_successfully = True # Set to True on successful text extraction
+
+            except requests.exceptions.MissingSchema:
+                st.error(f"Invalid URL: '{url}'. Please include http:// or https:// at the beginning.")
+            except requests.exceptions.Timeout:
+                st.error(f"The request to the URL '{url}' timed out. Please try again later.")
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 404:
+                    st.error(f"URL not found (404 Error): {url}")
+                elif e.response.status_code == 403:
+                    st.error(f"Access denied (403 Forbidden) for URL: {url}")
+                elif e.response.status_code == 401:
+                    st.error(f"Authentication required (401 Unauthorized) for URL: {url}")
+                elif 400 <= e.response.status_code < 500:
+                    st.error(f"Client error ({e.response.status_code}) accessing URL: {url}")
+                elif 500 <= e.response.status_code < 600:
+                    st.error(f"Server error ({e.response.status_code}) at URL: {url}. Please try again later.")
+                else:
+                    st.error(f"HTTP error ({e.response.status_code}) for URL: {url}. Details: {str(e)}")
+            except requests.exceptions.ConnectionError:
+                st.error(f"Failed to connect to the URL: '{url}'. Please check the URL and your internet connection.")
+            except requests.exceptions.RequestException as e: # General fallback for other requests issues
+                st.error(f"Error fetching URL '{url}': {str(e)}")
+            except Exception as e: # Fallback for BeautifulSoup parsing or other unexpected errors
+                st.error(f"Error parsing content from URL '{url}': {str(e)}")
+                st.warning("Could not extract meaningful text content from the URL.")
+
         return text
-    except Exception as e:
-        st.error(f"Error reading document: {str(e)}")
+    except Exception as e: # This is for errors related to file processing, keep it general
+        st.error(f"Error reading document(s): {str(e)}")
         return None
 
 def validate_selected_model():
@@ -538,30 +594,62 @@ def main():
         uploaded_docs = st.file_uploader(
             "Upload documents:",
             accept_multiple_files=True,
-            type=["pdf", "docx", "doc"]
+            type=["pdf", "docx", "doc"],
+            key="file_uploader"
         )
+        st.session_state.url_input = st.text_input("Or enter URL to ingest content:", placeholder="https://example.com", key="url_input_widget")
 
-        if not uploaded_docs:
-            st.info("Please upload PDF or Word documents to begin.")
-            st.button("Process Documents", disabled=True)
-        else:
-            st.success(f"{len(uploaded_docs)} document(s) uploaded!")
-
-            st.markdown("### Uploaded Documents:")
+        processed_items = []
+        if uploaded_docs:
             for doc in uploaded_docs:
-                st.markdown(f"- {doc.name}")
+                processed_items.append(doc.name)
+        if st.session_state.get('url_input', ''):
+            processed_items.append(f"URL: {st.session_state.url_input}")
+
+        if not uploaded_docs and not st.session_state.get('url_input', ''):
+            st.info("Please upload PDF or Word documents, or enter a URL to begin.")
+            st.button("Process Documents", disabled=True, key="process_disabled")
+        else:
+            if processed_items:
+                st.markdown("### Items to Process:")
+                for item in processed_items:
+                    st.markdown(f"- {item}")
 
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Process Documents", type="primary", key="process"):
-                    with st.spinner("Processing documents..."):
-                        raw_text = get_document_text(uploaded_docs)
+                    with st.spinner("Processing items..."):
+                        # Reset flag for URL processing success message
+                        st.session_state.url_processed_successfully = False 
+                        raw_text = get_document_text(uploaded_docs) # uploaded_docs can be empty
                         if raw_text:
                             text_chunks = get_text_chunks(raw_text)
                             if text_chunks and get_vector_store(text_chunks):
                                 st.session_state.processing_complete = True
-                                st.success("Documents processed successfully!")
+                                success_messages = []
+                                if uploaded_docs:
+                                    success_messages.append(f"{len(uploaded_docs)} document(s) processed.")
+                                if st.session_state.get('url_input', '') and st.session_state.get('url_processed_successfully', False):
+                                    success_messages.append("URL content processed.")
+                                elif st.session_state.get('url_input', '') and not st.session_state.get('url_processed_successfully', False):
+                                     # Error message for URL processing failure is handled in get_document_text
+                                     pass # No specific success message if URL processing failed
+                                
+                                if success_messages:
+                                    st.success(" ".join(success_messages))
+                                else:
+                                    # This case might happen if URL fails and no files were uploaded
+                                    st.warning("No content was successfully processed.") 
                                 st.rerun()
+                            elif not text_chunks and st.session_state.get('url_input', '') and not uploaded_docs:
+                                # Handles case where only URL was provided but text extraction failed or was empty
+                                st.error("Failed to extract text from the URL or the URL content was empty. Please check the URL and try again.")
+                        elif not uploaded_docs and st.session_state.get('url_input', ''): 
+                            # This case handles if get_document_text returns None AND only URL was given
+                            # Error for URL fetching itself is in get_document_text
+                            st.error("Failed to process the URL. Please ensure it's valid and accessible.")
+                        elif not raw_text and uploaded_docs:
+                             st.error("Failed to extract text from uploaded documents.")
 
             with col2:
                 if st.button("Clear All", type="secondary", key="clear"):
