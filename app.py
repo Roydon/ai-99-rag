@@ -50,7 +50,7 @@ AVAILABLE_MODELS = {
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.3
     },
-    "qwen-qwq-32b": {
+    "Qwen-qwq-32b": {
         "name": "qwen-qwq-32b",
         "context_length": 4096,
         "description": "Qwen QWQ 32B model from Alibaba Cloud",
