@@ -1,3 +1,8 @@
+import os
+
+# Disable file watcher to prevent inotify issues
+os.environ['STREAMLIT_SERVER_FILE_WATCHER_TYPE'] = 'none'
+
 import streamlit as st
 from PyPDF2 import PdfReader
 from docx import Document
@@ -12,15 +17,15 @@ from langchain_cohere import CohereEmbeddings
 from langchain_voyageai import VoyageAIEmbeddings
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
-import os
 import re
 import time
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
-
-# Disable file watcher to prevent inotify issues
-os.environ['STREAMLIT_SERVER_FILE_WATCHER_TYPE'] = 'none'
+try:
+    from cohere.errors import TooManyRequestsError as CohereTooManyRequestsError
+except ImportError:
+    CohereTooManyRequestsError = None # Placeholder if import fails
 
 # Model Configurations
 AVAILABLE_MODELS = {
@@ -45,7 +50,7 @@ AVAILABLE_MODELS = {
         "temperature_range": (0.0, 1.0),
         "default_temperature": 0.3
     },
-    "qwen-qwq-32b": {
+    "Qwen-qwq-32b": {
         "name": "qwen-qwq-32b",
         "context_length": 4096,
         "description": "Qwen QWQ 32B model from Alibaba Cloud",
@@ -135,8 +140,18 @@ def get_embeddings_model(embedding_choice):
         elif embedding_config["provider"] == "Cohere": # New condition
             return CohereEmbeddings(
                 model=embedding_config["name"],
-                cohere_api_key=st.secrets["COHERE_API_KEY"] # Ensure this secret is available
+                cohere_api_key=st.secrets["COHERE_API_KEY"]
             )
+        except CohereTooManyRequestsError as e:
+            st.error("Cohere API rate limit (429 Too Many Requests) exceeded. Your Cohere trial token may have reached its limit. Please check your Cohere account, wait a while, or select a different embeddings model.")
+            return None
+        except Exception as e: # Catch other potential errors from Cohere
+            # Check if it's a rate limit error by string, if specific import failed
+            if CohereTooManyRequestsError is None and ("TooManyRequestsError" in str(e) or "429" in str(e)):
+                st.error("Cohere API rate limit (429 Too Many Requests) exceeded. Your Cohere trial token may have reached its limit. Please check your Cohere account, wait a while, or select a different embeddings model.")
+                return None
+            st.error(f"Error initializing Cohere embeddings: {str(e)}")
+            return None
         elif embedding_config["provider"] == "VoyageAI":
             return VoyageAIEmbeddings(
                 model=embedding_config["name"],
@@ -293,7 +308,14 @@ def get_vector_store(text_chunks):
         vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
         vector_store.save_local("faiss_index")
         return True
+    except CohereTooManyRequestsError as e:
+        st.error("Cohere API rate limit (429 Too Many Requests) exceeded during vector store creation. Your Cohere trial token may have reached its limit. Please check your Cohere account, wait a while, or select a different embeddings model.")
+        return False
     except Exception as e:
+        # Check if it's a rate limit error by string, if specific import failed and error occurred in FAISS.from_texts
+        if CohereTooManyRequestsError is None and ("TooManyRequestsError" in str(e) or "429" in str(e)):
+            st.error("Cohere API rate limit (429 Too Many Requests) exceeded during vector store creation. Your Cohere trial token may have reached its limit. Please check your Cohere account, wait a while, or select a different embeddings model.")
+            return False
         st.error(f"Error creating vector store: {str(e)}")
         return False
 
